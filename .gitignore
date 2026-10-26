@@ -1,0 +1,8 @@
+# the built binary (anchored, so cmd/cli-to-api/ is not matched)
+/cli-to-api
+
+# local state, never commit: keys, conversation bindings, encryption key
+config.json
+sessions.json
+*.lock
+masterkey
