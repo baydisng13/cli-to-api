@@ -133,13 +133,12 @@ awk \
 	-v l_arm="$SHA_LINUX_ARM64" \
 	-v l_amd="$SHA_LINUX_AMD64" \
 	'
-	/^[[:space:]]*version[[:space:]]+"/ {
-		match($0, /^[[:space:]]*/)
-		indent = substr($0, 1, RLENGTH)
-		print indent "version \"" version "\""
-		next
-	}
 	/^[[:space:]]*url[[:space:]]+"/ {
+		# There is no `version` stanza: brew audit treats one as redundant
+		# when the version is readable from the URL. So the version lives in
+		# the URLs, and this is what moves it forward.
+		gsub(/\/download\/v[^\/"]+\//, "/download/v" version "/")
+		gsub(/cli-to-api_v[^_"]+_/, "cli-to-api_v" version "_")
 		slot = ""
 		if ($0 ~ /_darwin_arm64\.tar\.gz/) slot = d_arm
 		else if ($0 ~ /_darwin_amd64\.tar\.gz/) slot = d_amd

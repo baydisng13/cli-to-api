@@ -29,30 +29,7 @@
 class CliToApi < Formula
   desc "Serve local agentic CLIs behind an OpenAI-compatible API"
   homepage "https://github.com/baydisng13/cli-to-api"
-  version "0.1.0"
   license "MIT"
-
-  on_macos do
-    on_arm do
-      url "https://github.com/baydisng13/cli-to-api/releases/download/v#{version}/cli-to-api_v#{version}_darwin_arm64.tar.gz"
-      sha256 "47925e0fb0b8b93e9a14b8f68a71d46e1c953eb08e0664d468512cd22b3df127"
-    end
-    on_intel do
-      url "https://github.com/baydisng13/cli-to-api/releases/download/v#{version}/cli-to-api_v#{version}_darwin_amd64.tar.gz"
-      sha256 "fcaa9de67e9a35ae585f79a018843339941937f7a76db2b68617dcbb38e3b1ca"
-    end
-  end
-
-  on_linux do
-    on_arm do
-      url "https://github.com/baydisng13/cli-to-api/releases/download/v#{version}/cli-to-api_v#{version}_linux_arm64.tar.gz"
-      sha256 "ece78837bde3abc196c12a4578ce763e7520946b9edd5155f5310357649bb0cd"
-    end
-    on_intel do
-      url "https://github.com/baydisng13/cli-to-api/releases/download/v#{version}/cli-to-api_v#{version}_linux_amd64.tar.gz"
-      sha256 "55eaa5c0ffa87df8a9176ca4af5f204a4d4237331e632547e31cc1606e64ac7e"
-    end
-  end
 
   # Tracks the newest GitHub release tag, so `brew livecheck cli-to-api` (and
   # Homebrew's own bump jobs) can tell when this formula is behind.
@@ -60,6 +37,29 @@ class CliToApi < Formula
     url :stable
     strategy :github_latest
   end
+
+  on_macos do
+    on_arm do
+      url "https://github.com/baydisng13/cli-to-api/releases/download/v0.1.0/cli-to-api_v0.1.0_darwin_arm64.tar.gz"
+      sha256 "47925e0fb0b8b93e9a14b8f68a71d46e1c953eb08e0664d468512cd22b3df127"
+    end
+    on_intel do
+      url "https://github.com/baydisng13/cli-to-api/releases/download/v0.1.0/cli-to-api_v0.1.0_darwin_amd64.tar.gz"
+      sha256 "fcaa9de67e9a35ae585f79a018843339941937f7a76db2b68617dcbb38e3b1ca"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "https://github.com/baydisng13/cli-to-api/releases/download/v0.1.0/cli-to-api_v0.1.0_linux_arm64.tar.gz"
+      sha256 "ece78837bde3abc196c12a4578ce763e7520946b9edd5155f5310357649bb0cd"
+    end
+    on_intel do
+      url "https://github.com/baydisng13/cli-to-api/releases/download/v0.1.0/cli-to-api_v0.1.0_linux_amd64.tar.gz"
+      sha256 "55eaa5c0ffa87df8a9176ca4af5f204a4d4237331e632547e31cc1606e64ac7e"
+    end
+  end
+
 
   def install
     # Every archive holds exactly one file at its root: `cli-to-api`.
