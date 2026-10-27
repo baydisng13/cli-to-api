@@ -6,10 +6,34 @@ Point any OpenAI client at `http://localhost:8080/v1` and the text comes from wh
 
 Each API key is scoped to **one backend and an explicit list of models**. Keys survive restarts, and only their hash is stored.
 
+Runs on macOS, Linux, and Windows. No runtime, no database, no config file to write by hand.
+
+## Install
+
+**macOS / Linux**
 ```bash
-go build -o cli-to-api ./cmd/cli-to-api
-./cli-to-api key create     # wizard: pick a CLI, pick models, get a key
-./cli-to-api start
+curl -fsSL https://raw.githubusercontent.com/baydisng13/cli-to-api/main/install.sh | sh
+```
+
+**Windows (PowerShell)**
+```powershell
+irm https://raw.githubusercontent.com/baydisng13/cli-to-api/main/install.ps1 | iex
+```
+
+**With Go**
+```bash
+go install github.com/baydisng13/cli-to-api/cmd/cli-to-api@latest
+```
+
+Or grab a binary from [releases](https://github.com/baydisng13/cli-to-api/releases) — darwin/linux/windows, amd64 + arm64, each with a sha256 in `checksums.txt`. Full details, checksum verification, and uninstall in [docs/INSTALL.md](docs/INSTALL.md).
+
+macOS binaries are unsigned; the installer clears the quarantine attribute for you. If you download by hand, see the Gatekeeper note in the install docs.
+
+## Use
+
+```bash
+cli-to-api key create     # wizard: pick a CLI, pick models, get a key
+cli-to-api start
 ```
 
 ## The wizard
@@ -142,9 +166,22 @@ Resume is not a token saving — the backend re-reads the history on its side (o
 - **Latency is agent latency** — roughly 7–15s per request for `agy`, and deltas arrive in lumps rather than per token. Streaming UIs will look chunky.
 - **Concurrency defaults to 1 per key**, because each request can spawn a large subprocess. Raise `concurrency` in the key's profile if your backend tolerates it.
 
-## Tests
+## Building from source
 
 ```bash
+go build -o cli-to-api ./cmd/cli-to-api
 go test -race ./...
 ```
-Hermetic: no network, no Keychain, no real CLI needed.
+Tests are hermetic: no network, no Keychain, no real CLI needed. CI runs them on Linux, macOS, and Windows.
+
+## Platform notes
+
+| | macOS | Linux | Windows |
+|---|---|---|---|
+| Encryption key for secret options | Keychain | `0600` key file | key file (ACL-protected dir; see below) |
+| Config location | `~/.config/cli-to-api` | `~/.config/cli-to-api` | `%AppData%\cli-to-api` |
+| `shellcmd` backend | `sh -c` | `sh -c` | `cmd /S /C` |
+
+`$CLI_TO_API_HOME` overrides the config location everywhere.
+
+On Windows the key file's permissions are inherited from `%AppData%`, which is per-user by default — `chmod` is a no-op there, so pointing `CLI_TO_API_HOME` at a shared directory would leave it readable. On Windows, `shellcmd` refuses a `{{PROMPT}}` substitution it cannot quote safely for `cmd.exe` (quotes, `%`, `!`, newlines); pipe the prompt on stdin instead by leaving `{{PROMPT}}` out of the command.

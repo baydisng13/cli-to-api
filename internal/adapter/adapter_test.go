@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -286,6 +287,7 @@ func TestWorkdirHonorsConfiguredPath(t *testing.T) {
 
 // A shell command must actually execute inside the chosen directory.
 func TestShellcmdRunsInWorkdir(t *testing.T) {
+	requirePOSIXShell(t)
 	want := t.TempDir()
 	var got string
 	_, err := (shellcmd{}).Generate(context.Background(), Request{
@@ -305,6 +307,7 @@ func TestShellcmdRunsInWorkdir(t *testing.T) {
 // ---------- shellcmd ----------
 
 func TestShellcmdGenerate(t *testing.T) {
+	requirePOSIXShell(t)
 	tests := []struct {
 		name    string
 		cmd     string
@@ -352,8 +355,8 @@ func TestShellcmdModelsAndDetect(t *testing.T) {
 		t.Error("Detect with no cmd: want false")
 	}
 	path, ok := s.Detect(map[string]string{"cmd": "cat"})
-	if !ok || path != "sh" {
-		t.Errorf("Detect = (%q, %t), want (sh, true)", path, ok)
+	if !ok || path != shellName() {
+		t.Errorf("Detect = (%q, %t), want (%s, true)", path, ok, shellName())
 	}
 
 	models, err := s.Models(context.Background(), nil)
@@ -688,5 +691,70 @@ func TestParseAgyStreamResumeKeepsConversationID(t *testing.T) {
 	}
 	if res.Usage.PromptTokens != 14084 || res.Usage.TotalTokens != 14091 {
 		t.Errorf("usage = %+v", res.Usage)
+	}
+}
+
+// requirePOSIXShell skips tests whose command lines are sh scripts. The
+// adapter itself is cross-platform; `tr`, `pwd` and friends are not.
+func requirePOSIXShell(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("test command lines are POSIX sh, not cmd.exe")
+	}
+}
+
+// TestQuotePromptRoundTrip checks that whatever quotePrompt accepts really
+// does reach the command as a single, unmodified argument. On unix that is
+// every string; on Windows the unquotable ones are refused instead, which is
+// the property asserted in TestShellcmdRefusesUnquotablePrompt.
+func TestQuotePromptRoundTrip(t *testing.T) {
+	requirePOSIXShell(t)
+	for _, prompt := range []string{
+		"plain",
+		"it's fine",
+		`double "quoted"`,
+		"semi; echo pwned",
+		"$(echo pwned)",
+		"`echo pwned`",
+		"back\\slash",
+		"100% of $HOME",
+		"two\nlines",
+	} {
+		quoted, ok := quotePrompt(prompt)
+		if !ok {
+			t.Fatalf("quotePrompt(%q) refused on a POSIX shell", prompt)
+		}
+		var chunks []string
+		req := Request{
+			Messages: []Message{{Role: "user", Text: prompt}},
+			Options:  map[string]string{"cmd": "printf '%s' {{PROMPT}}"},
+		}
+		if _, err := (shellcmd{}).Generate(context.Background(), req, collector(&chunks)); err != nil {
+			t.Fatalf("Generate(%q): %v (quoted as %s)", prompt, err, quoted)
+		}
+		if got := joined(chunks); got != prompt {
+			t.Errorf("round trip of %q produced %q", prompt, got)
+		}
+	}
+}
+
+// TestShellcmdRefusesUnquotablePrompt is the Windows half of the contract: a
+// prompt cmd.exe cannot quote must produce a clear error naming the stdin
+// workaround, never a mangled or injected command line.
+func TestShellcmdRefusesUnquotablePrompt(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("cmd.exe quoting limits apply to Windows only")
+	}
+	var chunks []string
+	req := Request{
+		Messages: []Message{{Role: "user", Text: `a "quoted" %PATH%`}},
+		Options:  map[string]string{"cmd": "more {{PROMPT}}"},
+	}
+	_, err := (shellcmd{}).Generate(context.Background(), req, collector(&chunks))
+	if err == nil {
+		t.Fatal("want an error for an unquotable prompt, got nil")
+	}
+	if !strings.Contains(err.Error(), "stdin") {
+		t.Errorf("error = %v, want it to point at the stdin workaround", err)
 	}
 }

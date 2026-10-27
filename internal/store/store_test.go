@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -28,6 +29,19 @@ func TestDefaultDir(t *testing.T) {
 	}
 
 	t.Setenv("CLI_TO_API_HOME", "")
+	if runtime.GOOS == "windows" {
+		// Windows has no XDG convention: the directory comes from
+		// os.UserConfigDir (%AppData%), and only the override above applies.
+		d, err := DefaultDir()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if filepath.Base(d) != "cli-to-api" || !filepath.IsAbs(d) {
+			t.Fatalf("windows default: got %q", d)
+		}
+		return
+	}
+
 	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg")
 	want := filepath.Join("/tmp/xdg", "cli-to-api")
 	if d, err := DefaultDir(); err != nil || d != want {

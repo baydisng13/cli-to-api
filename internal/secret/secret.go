@@ -13,18 +13,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
-	"os/user"
 	"path/filepath"
 	"strings"
 )
 
 const (
-	// keychainService is the generic-password service name under which the
-	// data key lives in the macOS Keychain.
-	keychainService = "cli-to-api"
-
-	// keyFileName is the fallback location, relative to the config dir.
+	// keyFileName is where the data key lives when no OS keystore backs this
+	// build; relative to the config dir.
 	keyFileName = "masterkey"
 
 	// prefixV1 tags the only ciphertext layout we currently emit. Keeping a
@@ -45,6 +40,11 @@ var (
 	// ErrDecrypt covers both tampering and a mismatched data key; GCM cannot
 	// distinguish the two, and neither should the message.
 	ErrDecrypt = errors.New("secret: cannot decrypt value (wrong key or corrupted data)")
+
+	// errNoKeyring says this build has no OS keystore backend at all, as
+	// opposed to having one that failed. It never reaches a user: Open falls
+	// back to the key file either way.
+	errNoKeyring = errors.New("secret: no OS keyring on this platform")
 )
 
 // Box seals and opens individual secret values.
@@ -113,11 +113,16 @@ func (b *box) Open(ciphertext string) (string, error) {
 }
 
 // Open returns a Box backed by the machine's data key, creating that key on
-// first use. The Keychain is preferred because it survives a config-dir wipe
-// and is protected by the login session; the key file exists so the tool still
-// works on Linux, in CI, and over SSH where `security` is absent or blocked.
+// first use.
+//
+// Which backend is used is decided at compile time, not by whichever call
+// happens to succeed: see keyring_darwin.go and keyring_other.go. darwin
+// prefers the Keychain, because it survives a config-dir wipe and is protected
+// by the login session, and still falls back to the key file when `security`
+// is absent or blocked (a locked keychain over ssh, for instance). Every other
+// platform uses the 0600 key file, always.
 func Open(dir string) (Box, error) {
-	if key, err := keychainKey(); err == nil {
+	if key, err := platformKey(); err == nil {
 		return NewBoxWithKey(key), nil
 	}
 	key, err := fileKey(dir)
@@ -127,58 +132,9 @@ func Open(dir string) (Box, error) {
 	return NewBoxWithKey(key), nil
 }
 
-// keychainKey reads the data key from the macOS Keychain, creating it if it is
-// not there yet. Errors are returned bare: callers fall back, and the error
-// text must never carry key material.
-func keychainKey() ([]byte, error) {
-	if _, err := exec.LookPath("security"); err != nil {
-		return nil, err
-	}
-	acct, err := currentAccount()
-	if err != nil {
-		return nil, err
-	}
-
-	out, err := exec.Command("security", "find-generic-password",
-		"-a", acct, "-s", keychainService, "-w").Output()
-	if err == nil {
-		key, derr := hex.DecodeString(strings.TrimSpace(string(out)))
-		if derr == nil && len(key) == keyLen {
-			return key, nil
-		}
-		// A malformed entry is not something to silently overwrite: a stale
-		// value may still be the only way to read existing ciphertext.
-		return nil, errors.New("secret: keychain entry is not a valid data key")
-	}
-
-	key := make([]byte, keyLen)
-	if _, err := rand.Read(key); err != nil {
-		return nil, err
-	}
-	// -U updates in place if a (bad) entry somehow exists, avoiding a
-	// duplicate-item error. The key is passed as an argument, which is visible
-	// in the process list for an instant; the Keychain CLI offers no better
-	// path, and the file fallback has the same exposure profile.
-	cmd := exec.Command("security", "add-generic-password",
-		"-a", acct, "-s", keychainService, "-w", hex.EncodeToString(key), "-U")
-	if err := cmd.Run(); err != nil {
-		return nil, err
-	}
-	return key, nil
-}
-
-func currentAccount() (string, error) {
-	u, err := user.Current()
-	if err != nil {
-		return "", err
-	}
-	if u.Username == "" {
-		return "", errors.New("secret: empty username")
-	}
-	return u.Username, nil
-}
-
-// fileKey reads, or creates, the 0600 key file in the config dir.
+// fileKey reads, or creates, the owner-only key file in the config dir. The
+// mode is 0600 on unix; see perm_windows.go for what it is and is not worth
+// on Windows.
 func fileKey(dir string) ([]byte, error) {
 	path := filepath.Join(dir, keyFileName)
 	raw, err := os.ReadFile(path)
@@ -208,6 +164,10 @@ func fileKey(dir string) ([]byte, error) {
 			return fileKey(dir)
 		}
 		return nil, fmt.Errorf("secret: create %s: %w", path, err)
+	}
+	if err := restrictFile(f); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("secret: restrict %s: %w", path, err)
 	}
 	if _, err := f.WriteString(hex.EncodeToString(key)); err != nil {
 		f.Close()

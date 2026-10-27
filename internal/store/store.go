@@ -7,8 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
+
+	"cli-to-api/internal/filelock"
 )
 
 const (
@@ -40,19 +41,17 @@ var (
 )
 
 // DefaultDir resolves the configuration directory, honouring an explicit
-// override first and the XDG convention second.
+// override first and the platform convention second. The per-platform part
+// lives in dir_unix.go / dir_windows.go.
 func DefaultDir() (string, error) {
 	if d := os.Getenv("CLI_TO_API_HOME"); d != "" {
 		return d, nil
 	}
-	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" {
-		return filepath.Join(d, "cli-to-api"), nil
-	}
-	home, err := os.UserHomeDir()
+	base, err := configBase()
 	if err != nil {
-		return "", fmt.Errorf("store: locate home directory: %w", err)
+		return "", err
 	}
-	return filepath.Join(home, ".config", "cli-to-api"), nil
+	return filepath.Join(base, "cli-to-api"), nil
 }
 
 // usageDelta is the unflushed part of a key's usage counters.
@@ -237,24 +236,14 @@ func (s *Store) mutate(fn func(*Config) error) error {
 
 // flock takes an exclusive advisory lock on the lock file. Advisory locking
 // is best effort: on a filesystem that does not support it we would rather
-// serve the user with a small race window than refuse to run at all.
+// serve the user with a small race window than refuse to run at all. The
+// mechanism differs per platform (see lock_unix.go / lock_windows.go) but the
+// contract does not: the returned func releases, and never reports failure.
 func (s *Store) flock() func() {
-	noop := func() {}
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
-		return noop
+		return func() {}
 	}
-	f, err := os.OpenFile(filepath.Join(s.dir, lockFileName), os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return noop
-	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		f.Close()
-		return noop
-	}
-	return func() {
-		syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-		f.Close()
-	}
+	return filelock.Acquire(filepath.Join(s.dir, lockFileName))
 }
 
 // saveLocked writes the config atomically: a temp file in the same directory

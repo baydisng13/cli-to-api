@@ -1,0 +1,139 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  BINARY: cli-to-api
+
+jobs:
+  # Everything cross-compiles from one Linux runner: the module is pure Go with
+  # zero dependencies, so CGO_ENABLED=0 makes `go build` a straight
+  # cross-compiler. That is faster than a 3-OS matrix and sidesteps code
+  # signing entirely.
+  #
+  # NOTE: the darwin binaries are therefore UNSIGNED and UNNOTARIZED. macOS
+  # Gatekeeper quarantines anything downloaded by a browser, so a user who
+  # grabs the tarball from the Releases page by hand may see
+  # "cannot be opened because the developer cannot be verified" and must run
+  # `xattr -d com.apple.quarantine /usr/local/bin/cli-to-api` (or Right-click >
+  # Open once). Downloads made by curl/install.sh are not quarantined, so the
+  # one-line installer is unaffected. See docs/INSTALL.md.
+  build:
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Build and archive
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          echo "Building ${BINARY} ${TAG} for ${GOOS}/${GOARCH}"
+
+          # Staging dir holds exactly the files that go inside the archive.
+          mkdir -p stage dist
+
+          bin="${BINARY}"
+          if [ "$GOOS" = "windows" ]; then
+            bin="${BINARY}.exe"
+          fi
+
+          go build \
+            -trimpath \
+            -ldflags "-s -w -X main.version=${TAG}" \
+            -o "stage/${bin}" \
+            ./cmd/cli-to-api
+
+          base="${BINARY}_${TAG}_${GOOS}_${GOARCH}"
+          if [ "$GOOS" = "windows" ]; then
+            (cd stage && zip -q -X "../dist/${base}.zip" "${bin}")
+          else
+            # Deterministic-ish tarball: fixed mtime/owner, sorted entries.
+            tar --sort=name \
+                --owner=0 --group=0 --numeric-owner \
+                --mtime="@${SOURCE_DATE_EPOCH:-0}" \
+                -czf "dist/${base}.tar.gz" \
+                -C stage "${bin}"
+          fi
+
+          ls -l dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Collect archives
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: dist-*
+          merge-multiple: true
+
+      - name: Generate checksums.txt
+        run: |
+          set -euo pipefail
+          cd dist
+          # Plain basenames only, so `sha256sum -c checksums.txt` works for a
+          # user who downloaded the archives into one directory.
+          : > checksums.txt
+          for f in *.tar.gz *.zip; do
+            [ -f "$f" ] || continue
+            sha256sum -- "$f" >> checksums.txt
+          done
+          [ -s checksums.txt ] || { echo "::error::no archives found to checksum"; exit 1; }
+          cat checksums.txt
+          echo "---"
+          ls -l
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt

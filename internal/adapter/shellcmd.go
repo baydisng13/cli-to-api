@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 )
 
@@ -20,7 +19,7 @@ func (shellcmd) DisplayName() string { return "Custom shell command" }
 
 func (shellcmd) OptionSpec() []Option {
 	return []Option{
-		{Key: "cmd", Label: "Shell command ({{PROMPT}} is substituted, else prompt goes to stdin)", Required: true},
+		{Key: "cmd", Label: "Shell command ({{PROMPT}} is substituted, else prompt goes to stdin; on Windows prefer stdin, cmd.exe cannot quote a prompt containing \" or %)", Required: true},
 		{Key: "model_name", Label: "Model name to advertise", Default: "custom"},
 		WorkdirOption,
 	}
@@ -28,8 +27,9 @@ func (shellcmd) OptionSpec() []Option {
 
 func (shellcmd) Detect(opts map[string]string) (string, bool) {
 	// There is nothing to look up: the command is whatever the user typed, and
-	// sh always exists. Only an empty command makes this adapter unusable.
-	return "sh", strings.TrimSpace(opts["cmd"]) != ""
+	// every platform ships a shell. Only an empty command makes this adapter
+	// unusable.
+	return shellName(), strings.TrimSpace(opts["cmd"]) != ""
 }
 
 func (shellcmd) Models(_ context.Context, opts map[string]string) ([]Model, error) {
@@ -48,10 +48,16 @@ func (shellcmd) Generate(ctx context.Context, req Request, emit Emit) (Result, e
 
 	prompt := req.Prompt()
 	// Commands that name the prompt get it as an argument; everything else
-	// reads it from stdin, which is the safer default for long prompts.
+	// reads it from stdin, which is the safer default for long prompts - and
+	// on Windows the only one that is always correct, since cmd.exe cannot
+	// quote every string. Refusing beats substituting something subtly wrong.
 	usesPlaceholder := strings.Contains(cmdline, "{{PROMPT}}")
 	if usesPlaceholder {
-		cmdline = strings.ReplaceAll(cmdline, "{{PROMPT}}", shellQuote(prompt))
+		quoted, ok := quotePrompt(prompt)
+		if !ok {
+			return Result{}, fmt.Errorf("shellcmd: %s cannot quote this prompt safely (it contains a quote, %%, ! or a newline); drop {{PROMPT}} from the command so the prompt is piped to stdin instead", shellName())
+		}
+		cmdline = strings.ReplaceAll(cmdline, "{{PROMPT}}", quoted)
 	}
 
 	dir, cleanupDir, err := workdir(req.Options)
@@ -60,7 +66,7 @@ func (shellcmd) Generate(ctx context.Context, req Request, emit Emit) (Result, e
 	}
 	defer cleanupDir()
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", cmdline)
+	cmd := shellCommand(ctx, cmdline)
 	cmd.Dir = dir
 	if !usesPlaceholder {
 		cmd.Stdin = strings.NewReader(prompt)
@@ -114,10 +120,6 @@ func modelLabel(req Request) string {
 		return n
 	}
 	return "custom"
-}
-
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // truncate shortens a backend error for the wire; newlines would otherwise

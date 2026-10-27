@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -113,15 +114,19 @@ func TestFileKeyCreatesModeThenReuses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := fi.Mode().Perm(); got != 0o600 {
-		t.Fatalf("key file mode %o, want 600", got)
-	}
-	di, err := os.Stat(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := di.Mode().Perm(); got != 0o700 {
-		t.Fatalf("config dir mode %o, want 700", got)
+	// Windows maps a mode onto the read-only attribute alone, so the 0600
+	// assertion is meaningful on unix only; see perm_windows.go.
+	if runtime.GOOS != "windows" {
+		if got := fi.Mode().Perm(); got != 0o600 {
+			t.Fatalf("key file mode %o, want 600", got)
+		}
+		di, err := os.Stat(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := di.Mode().Perm(); got != 0o700 {
+			t.Fatalf("config dir mode %o, want 700", got)
+		}
 	}
 
 	k2, err := fileKey(dir)
@@ -140,5 +145,51 @@ func TestFileKeyRejectsGarbage(t *testing.T) {
 	}
 	if _, err := fileKey(dir); err == nil {
 		t.Fatal("expected an error for a malformed key file")
+	}
+}
+
+// TestOpenPicksABackendDeterministically checks the property the build tags
+// exist for: two Opens on the same machine and config dir must agree on the
+// key, so a value sealed by one run is readable by the next.
+func TestOpenPicksABackendDeterministically(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		// Open would read, and on a fresh account write, the real login
+		// keychain of whoever runs the suite. Not a test's business.
+		t.Skip("darwin Open touches the user's login keychain")
+	}
+	dir := t.TempDir()
+
+	b1, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	ct, err := b1.Seal("hunter2")
+	if err != nil {
+		t.Fatalf("Seal: %v", err)
+	}
+
+	b2, err := Open(dir)
+	if err != nil {
+		t.Fatalf("second Open: %v", err)
+	}
+	got, err := b2.Open(ct)
+	if err != nil {
+		t.Fatalf("Open(ciphertext): %v", err)
+	}
+	if got != "hunter2" {
+		t.Errorf("round trip = %q, want hunter2", got)
+	}
+}
+
+// TestPlatformKeyIsAbsentOffDarwin pins the explicit, compile-time choice:
+// only darwin talks to an OS keystore, everything else uses the key file and
+// says so rather than discovering it through a failed call.
+func TestPlatformKeyIsAbsentOffDarwin(t *testing.T) {
+	_, err := platformKey()
+	if runtime.GOOS == "darwin" {
+		return // may succeed or fail depending on the keychain; both are fine
+	}
+	if !errors.Is(err, errNoKeyring) {
+		t.Fatalf("platformKey() error = %v, want errNoKeyring", err)
 	}
 }

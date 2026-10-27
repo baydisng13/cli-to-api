@@ -21,8 +21,9 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
-	"syscall"
 	"time"
+
+	"cli-to-api/internal/filelock"
 )
 
 const (
@@ -326,22 +327,10 @@ func (s *Sessions) mutate(fn func() error) error {
 // flock takes an exclusive advisory lock. Best effort: on a filesystem
 // without locking we would rather accept a small race than refuse to serve.
 func (s *Sessions) flock() func() {
-	noop := func() {}
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
-		return noop
+		return func() {}
 	}
-	f, err := os.OpenFile(filepath.Join(s.dir, lockFileName), os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return noop
-	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		f.Close()
-		return noop
-	}
-	return func() {
-		syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-		f.Close()
-	}
+	return filelock.Acquire(filepath.Join(s.dir, lockFileName))
 }
 
 // saveLocked writes atomically: temp file in the same directory, fsynced,

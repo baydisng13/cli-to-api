@@ -237,3 +237,58 @@ func itoa(n int) string {
 	}
 	return string(b)
 }
+
+// TestSecretWarnsWhenEchoCannotBeDisabled pins the safety property: a secret
+// prompt that cannot silence the terminal must say so, never echo silently.
+func TestSecretWarnsWhenEchoCannotBeDisabled(t *testing.T) {
+	prev := echoOff
+	echoOff = func() (func(), bool) { return func() {}, false }
+	defer func() { echoOff = prev }()
+
+	w, out := newTest("s3cr3t\n")
+	got, err := w.Secret("API key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "s3cr3t" {
+		t.Errorf("Secret = %q", got)
+	}
+	if !strings.Contains(out.String(), "input will be visible") {
+		t.Errorf("no visibility warning in output:\n%s", out.String())
+	}
+}
+
+// TestSecretRestoresEchoAndStaysQuiet is the other half: when echo was
+// disabled the warning must not appear, and the mode must be put back.
+func TestSecretRestoresEchoAndStaysQuiet(t *testing.T) {
+	restored := false
+	prev := echoOff
+	echoOff = func() (func(), bool) { return func() { restored = true }, true }
+	defer func() { echoOff = prev }()
+
+	w, out := newTest("s3cr3t\n")
+	if _, err := w.Secret("API key"); err != nil {
+		t.Fatal(err)
+	}
+	if !restored {
+		t.Error("terminal mode was not restored")
+	}
+	if strings.Contains(out.String(), "input will be visible") {
+		t.Errorf("warned despite echo being off:\n%s", out.String())
+	}
+}
+
+// TestDisableEchoWithoutTerminal checks the real implementation's contract
+// under `go test`, where stdin is not a console on any platform: it must
+// report failure rather than claim a silenced terminal.
+func TestDisableEchoWithoutTerminal(t *testing.T) {
+	restore, ok := disableEcho()
+	if restore == nil {
+		t.Fatal("disableEcho returned a nil restore func")
+	}
+	if ok {
+		// Not a failure in itself (someone may have wired a tty to the test
+		// binary), but then the restore func must work.
+		restore()
+	}
+}

@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -128,11 +127,16 @@ func (w *Wizard) Text(label, def string, required bool) (string, error) {
 	}
 }
 
+// echoOff is the hook Secret uses to silence the terminal. It is a variable
+// so tests can drive both outcomes; production always gets the per-platform
+// disableEcho from echo_unix.go / echo_windows.go.
+var echoOff = disableEcho
+
 // Secret asks for a value without echoing it. Falls back to a visible prompt
 // when the terminal cannot be put into no-echo mode, and says so, so the user
 // is never misled about whether their input is on screen.
 func (w *Wizard) Secret(label string) (string, error) {
-	restore, ok := disableEcho()
+	restore, ok := echoOff()
 	if !ok {
 		w.Dim("  (terminal echo could not be disabled; input will be visible)")
 	}
@@ -143,24 +147,6 @@ func (w *Wizard) Secret(label string) (string, error) {
 		w.printf("\n")
 	}
 	return ans, err
-}
-
-// disableEcho shells out to stty, which avoids a terminal library dependency.
-// The returned func restores the previous mode.
-func disableEcho() (restore func(), ok bool) {
-	if !isTerminal(os.Stdin) {
-		return func() {}, false
-	}
-	prev, err := exec.Command("stty", "-f", "/dev/tty", "-g").Output()
-	if err != nil {
-		return func() {}, false
-	}
-	if err := exec.Command("stty", "-f", "/dev/tty", "-echo").Run(); err != nil {
-		return func() {}, false
-	}
-	return func() {
-		_ = exec.Command("stty", "-f", "/dev/tty", strings.TrimSpace(string(prev))).Run()
-	}, true
 }
 
 // Confirm asks a yes/no question.
