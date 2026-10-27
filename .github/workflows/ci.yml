@@ -132,7 +132,10 @@ jobs:
             -H 'content-type: application/json' \
             -d '{"messages":[{"role":"user","content":"ping"}]}' | tee /tmp/chat.txt
           echo
-          grep -q 'echo> ping' /tmp/chat.txt
+          # ">" arrives as the JSON escape \u003e, so match the parts that
+          # are not subject to escaping rather than the rendered text.
+          grep -q '"object":"chat.completion"' /tmp/chat.txt
+          grep -q 'ping' /tmp/chat.txt
 
           echo "--- streaming ---"
           curl -fsSN "http://127.0.0.1:8098/v1/chat/completions" \
