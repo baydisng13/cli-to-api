@@ -20,6 +20,17 @@ curl -fsSL https://raw.githubusercontent.com/baydisng13/cli-to-api/main/install.
 irm https://raw.githubusercontent.com/baydisng13/cli-to-api/main/install.ps1 | iex
 ```
 
+**Homebrew** (this repo is its own tap)
+```bash
+brew tap baydisng13/cli-to-api https://github.com/baydisng13/cli-to-api
+brew install cli-to-api
+```
+
+**npm**
+```bash
+npx cli-to-api --help      # or: npm i -g cli-to-api
+```
+
 **With Go**
 ```bash
 go install github.com/baydisng13/cli-to-api/cmd/cli-to-api@latest
@@ -174,6 +185,21 @@ go test -race ./...
 ```
 Tests are hermetic: no network, no Keychain, no real CLI needed. CI runs them on Linux, macOS, and Windows.
 
+## Repository layout
+
+One repo, one branch, everything in it:
+
+```
+cmd/ internal/          the Go server (module root, so
+                        `go install …/cmd/cli-to-api@latest` stays short)
+Formula/                Homebrew formula — this repo is its own tap
+packaging/npm/          npm wrapper (downloads the released binary)
+packaging/homebrew/     formula regenerator
+install.sh install.ps1  the one-line installers
+docs/                   INSTALL.md, PACKAGING.md
+.github/workflows/      CI (linux/macos/windows) and release
+```
+
 ## Platform notes
 
 | | macOS | Linux | Windows |
@@ -185,3 +211,7 @@ Tests are hermetic: no network, no Keychain, no real CLI needed. CI runs them on
 `$CLI_TO_API_HOME` overrides the config location everywhere.
 
 On Windows the key file's permissions are inherited from `%AppData%`, which is per-user by default — `chmod` is a no-op there, so pointing `CLI_TO_API_HOME` at a shared directory would leave it readable. On Windows, `shellcmd` refuses a `{{PROMPT}}` substitution it cannot quote safely for `cmd.exe` (quotes, `%`, `!`, newlines); pipe the prompt on stdin instead by leaving `{{PROMPT}}` out of the command.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

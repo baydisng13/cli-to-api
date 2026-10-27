@@ -1,0 +1,49 @@
+{
+  "name": "cli-to-api",
+  "version": "0.1.0",
+  "description": "Serve local agentic CLIs behind an OpenAI-compatible API. Single Go binary, no dependencies, no database.",
+  "license": "MIT",
+  "keywords": [
+    "openai",
+    "openai-compatible",
+    "cli",
+    "api",
+    "proxy",
+    "llm",
+    "agent"
+  ],
+  "homepage": "https://github.com/baydisng13/cli-to-api#readme",
+  "bugs": {
+    "url": "https://github.com/baydisng13/cli-to-api/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baydisng13/cli-to-api.git",
+    "directory": "packaging/npm"
+  },
+  "author": "baydisng13",
+  "bin": {
+    "cli-to-api": "bin/cli-to-api.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install.js"
+  },
+  "files": [
+    "bin/cli-to-api.js",
+    "scripts/install.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "dependencies": {}
+}

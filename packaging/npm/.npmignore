@@ -1,0 +1,14 @@
+# The `files` allowlist in package.json is what actually decides the tarball
+# contents; this is belt-and-braces for anything that lands in this directory
+# during local testing or a CI run.
+
+# The downloaded binary must never be published — the whole point of this
+# package is that it fetches the binary at install time, per platform.
+bin/cli-to-api
+bin/cli-to-api.exe
+bin/.*.tmp
+
+node_modules/
+*.log
+*.tgz
+.DS_Store
