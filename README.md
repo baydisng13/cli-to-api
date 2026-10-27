@@ -29,7 +29,7 @@ brew install cli-to-api
 
 **npm**
 ```bash
-npx cliapi --help      # or: npm i -g cliapi
+npx @baydisng13/cli-to-api --help      # or: npm i -g @baydisng13/cli-to-api
 ```
 
 **With Go**

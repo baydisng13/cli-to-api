@@ -3,7 +3,7 @@
 How to get a `cli-to-api` release onto the two extra install channels:
 
 * **Homebrew** — `brew tap baydisng13/cli-to-api https://github.com/baydisng13/cli-to-api` then `brew install cli-to-api`
-* **npm** — `npx cliapi`, `npm i -g cliapi`
+* **npm** — `npx @baydisng13/cli-to-api`, `npm i -g @baydisng13/cli-to-api`
 
 This is a runbook for a human doing it for the first time. Everything here
 happens **after** a release exists; nothing in this document builds binaries.
@@ -266,7 +266,7 @@ npm view cli-to-api
 ```
 
 If the name is taken, publish under a scope instead — change `name` in
-`packaging/npm/package.json` to `cliapi` and update
+`packaging/npm/package.json` to `@baydisng13/cli-to-api` and update
 `packaging/npm/README.md` and `docs/INSTALL.md` to match. `--access public` is
 required for a scoped package (it is harmless for an unscoped one).
 
@@ -308,14 +308,14 @@ cd "$(mktemp -d)"
 npx --yes cli-to-api@0.2.0 version     # must print v0.2.0
 
 # and the global install
-npm i -g cliapi@0.2.0
+npm i -g @baydisng13/cli-to-api@0.2.0
 which cli-to-api && cli-to-api version
 ```
 
 Check the failure mode too — it must be a sentence, not a stack trace:
 
 ```sh
-npm i -g cliapi@0.2.0 --ignore-scripts
+npm i -g @baydisng13/cli-to-api@0.2.0 --ignore-scripts
 cli-to-api version      # prints how to fix it, exits 1
 ```
 
@@ -357,8 +357,8 @@ Add the new routes to `docs/INSTALL.md` and `README.md`:
 
 ```sh
 brew install cli-to-api
-npx cliapi --help
-npm i -g cliapi
+npx @baydisng13/cli-to-api --help
+npm i -g @baydisng13/cli-to-api
 ```
 
 (That edit is outside the scope of the packaging files themselves — it is a
