@@ -182,6 +182,13 @@ func TestFilePermissions(t *testing.T) {
 	if err := s.Add(key("aaaaaaaa")); err != nil {
 		t.Fatal(err)
 	}
+	if runtime.GOOS == "windows" {
+		// Chmod cannot express a POSIX mode on Windows, so the file lands
+		// 0666. What keeps it private there is the ACL inherited from
+		// %AppData%, which is per-user by default. Asserting a mode would be
+		// asserting a protection Windows does not provide this way.
+		t.Skip("POSIX file modes are not meaningful on Windows")
+	}
 	fi, err := os.Stat(filepath.Join(dir, ConfigFileName))
 	if err != nil {
 		t.Fatal(err)

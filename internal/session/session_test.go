@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -192,7 +193,9 @@ func TestPersistenceRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if perm := fi.Mode().Perm(); perm != 0o600 {
+	// Windows cannot express a POSIX mode; the file is protected there by the
+	// ACL on %AppData% instead. See the same note in the store tests.
+	if perm := fi.Mode().Perm(); perm != 0o600 && runtime.GOOS != "windows" {
 		t.Fatalf("permissions = %v", perm)
 	}
 
