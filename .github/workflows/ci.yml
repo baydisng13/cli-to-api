@@ -59,3 +59,98 @@ jobs:
 
       - name: go test -race
         run: go test -race ./...
+
+  smoke:
+    name: smoke (${{ matrix.os }})
+    # Unit tests exercise the packages; this exercises the actual binary the
+    # way a user does -- create a key, start the server, make a request. It is
+    # the only check that would catch a Windows-only failure in process
+    # spawning, path handling, or the config directory, none of which the
+    # library tests touch.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Build
+        run: go build -o ${{ runner.os == 'Windows' && 'cli-to-api.exe' || 'cli-to-api' }} ./cmd/cli-to-api
+
+      # bash on the Windows runner is git-bash, so one script covers all three
+      # platforms. What is under test is the binary, not the shell.
+      - name: Smoke test
+        shell: bash
+        env:
+          CLI_TO_API_HOME: ${{ runner.temp }}/cta-smoke
+        run: |
+          set -euo pipefail
+          BIN=./cli-to-api
+          [ "${RUNNER_OS}" = "Windows" ] && BIN=./cli-to-api.exe
+
+          echo "--- version ---"
+          "$BIN" version
+
+          echo "--- doctor (echo backend must be present) ---"
+          "$BIN" doctor | tee /tmp/doctor.txt
+          grep -q "echo" /tmp/doctor.txt
+
+          echo "--- key create (echo backend, first model, scripted stdin) ---"
+          printf '2\n1\nsmoke\n' | "$BIN" key create | tee /tmp/create.txt
+          KEY="$(grep -oE 'cta_live_[A-Za-z0-9_-]+' /tmp/create.txt | head -1)"
+          test -n "$KEY"
+
+          echo "--- key list ---"
+          "$BIN" key list | grep -q smoke
+
+          echo "--- start server ---"
+          "$BIN" start --addr 127.0.0.1:8098 > /tmp/server.log 2>&1 &
+          SRV=$!
+          # Poll rather than sleep a fixed amount: the Windows runner is slow
+          # to bind and a fixed sleep is how this becomes a flaky test.
+          for i in $(seq 1 40); do
+            if curl -fsS "http://127.0.0.1:8098/healthz" >/dev/null 2>&1; then break; fi
+            sleep 0.5
+          done
+
+          echo "--- healthz ---"
+          curl -fsS "http://127.0.0.1:8098/healthz"; echo
+
+          echo "--- unauthenticated request must be refused ---"
+          code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8098/v1/models")"
+          test "$code" = "401" || { echo "expected 401, got $code"; exit 1; }
+
+          echo "--- chat completion ---"
+          curl -fsS "http://127.0.0.1:8098/v1/chat/completions" \
+            -H "Authorization: Bearer ${KEY}" \
+            -H 'content-type: application/json' \
+            -d '{"messages":[{"role":"user","content":"ping"}]}' | tee /tmp/chat.txt
+          echo
+          grep -q 'echo> ping' /tmp/chat.txt
+
+          echo "--- streaming ---"
+          curl -fsSN "http://127.0.0.1:8098/v1/chat/completions" \
+            -H "Authorization: Bearer ${KEY}" \
+            -H 'content-type: application/json' \
+            -d '{"stream":true,"messages":[{"role":"user","content":"ping"}]}' | tee /tmp/stream.txt
+          grep -q 'data: \[DONE\]' /tmp/stream.txt
+
+          echo "--- revoke takes effect on the running server ---"
+          ID="$("$BIN" key list | awk 'NR==2 {print $1}')"
+          "$BIN" key revoke "$ID"
+          code="$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${KEY}" "http://127.0.0.1:8098/v1/models")"
+          test "$code" = "401" || { echo "revoked key still accepted (got $code)"; exit 1; }
+
+          kill "$SRV" 2>/dev/null || true
+          echo "smoke OK on ${RUNNER_OS}"
+
+      - name: Server log on failure
+        if: failure()
+        shell: bash
+        run: cat /tmp/server.log || true
