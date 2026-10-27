@@ -11,8 +11,8 @@ models**.
 ## Install
 
 ```sh
-npx cli-to-api --help      # one-off, nothing installed globally
-npm i -g cli-to-api        # or install it for good
+npx @baydisng13/cli-to-api --help      # one-off, nothing installed globally
+npm i -g @baydisng13/cli-to-api        # or install it for good
 ```
 
 ## Use

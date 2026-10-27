@@ -3,7 +3,7 @@
 How to get a `cli-to-api` release onto the two extra install channels:
 
 * **Homebrew** — `brew tap baydisng13/cli-to-api https://github.com/baydisng13/cli-to-api` then `brew install cli-to-api`
-* **npm** — `npx cli-to-api`, `npm i -g cli-to-api`
+* **npm** — `npx @baydisng13/cli-to-api`, `npm i -g @baydisng13/cli-to-api`
 
 This is a runbook for a human doing it for the first time. Everything here
 happens **after** a release exists; nothing in this document builds binaries.
@@ -89,8 +89,20 @@ formula stays in the monorepo next to the code it installs.
 
 ```bash
 brew tap baydisng13/cli-to-api https://github.com/baydisng13/cli-to-api
+brew trust baydisng13/cli-to-api
 brew install cli-to-api
 ```
+
+Homebrew 7 refuses to load a formula from an untrusted third-party tap:
+
+```
+Error: Refusing to load formula ... from untrusted tap baydisng13/cli-to-api.
+Run `brew trust ...` to trust it.
+```
+
+That gate applies to every third-party tap, not just this arrangement, so
+it is not a cost of keeping the formula in the monorepo. Mention it
+wherever the tap is advertised, or users hit it on their first install.
 
 The cost is one extra word for the user compared with the conventional
 `brew install cli-to-api`, which would require a second repo
@@ -296,14 +308,14 @@ cd "$(mktemp -d)"
 npx --yes cli-to-api@0.2.0 version     # must print v0.2.0
 
 # and the global install
-npm i -g cli-to-api@0.2.0
+npm i -g @baydisng13/cli-to-api@0.2.0
 which cli-to-api && cli-to-api version
 ```
 
 Check the failure mode too — it must be a sentence, not a stack trace:
 
 ```sh
-npm i -g cli-to-api@0.2.0 --ignore-scripts
+npm i -g @baydisng13/cli-to-api@0.2.0 --ignore-scripts
 cli-to-api version      # prints how to fix it, exits 1
 ```
 
@@ -345,8 +357,8 @@ Add the new routes to `docs/INSTALL.md` and `README.md`:
 
 ```sh
 brew install cli-to-api
-npx cli-to-api --help
-npm i -g cli-to-api
+npx @baydisng13/cli-to-api --help
+npm i -g @baydisng13/cli-to-api
 ```
 
 (That edit is outside the scope of the packaging files themselves — it is a

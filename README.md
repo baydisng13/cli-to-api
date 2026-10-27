@@ -23,12 +23,13 @@ irm https://raw.githubusercontent.com/baydisng13/cli-to-api/main/install.ps1 | i
 **Homebrew** (this repo is its own tap)
 ```bash
 brew tap baydisng13/cli-to-api https://github.com/baydisng13/cli-to-api
+brew trust baydisng13/cli-to-api     # Homebrew 7+ gates third-party taps
 brew install cli-to-api
 ```
 
 **npm**
 ```bash
-npx cli-to-api --help      # or: npm i -g cli-to-api
+npx @baydisng13/cli-to-api --help      # or: npm i -g @baydisng13/cli-to-api
 ```
 
 **With Go**
