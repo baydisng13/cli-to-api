@@ -1,5 +1,5 @@
 {
-  "name": "@baydisng13/cli-to-api",
+  "name": "cliapi",
   "version": "0.1.0",
   "description": "Serve local agentic CLIs behind an OpenAI-compatible API. Single Go binary, no dependencies, no database.",
   "license": "MIT",
