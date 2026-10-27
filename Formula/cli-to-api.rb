@@ -60,7 +60,6 @@ class CliToApi < Formula
     end
   end
 
-
   def install
     # Every archive holds exactly one file at its root: `cli-to-api`.
     bin.install "cli-to-api"
